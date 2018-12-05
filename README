@@ -1,0 +1,9 @@
+This repository contains bare metal code to run on an Allwinner A20 (sun7i) and output low resolution graphics to the HDMI port scaled up to 1080p.
+
+This demonstrates a basic build environment, and use of 3 cores of the A20 SoC:
+
+* HDMI - to output a 1080p signal to a TV
+* Display engine frontend - to read a 480x270 pixel buffer from sdram, scale to 1920x1080, and output to display engine backend.
+* Display engine backend - configured as a passthrough from the frontend to HDMI.
+
+The demo displays a test pattern and displays a small sprite over the top if one is present in memory. The application can be built according to the simple build script and executed from u-boot from 0x8000 or from an ELF.
