@@ -4,13 +4,35 @@
 // Make _start global.
 .globl _start
  
-// Entry point for the kernel.
-// r15 -> should begin execution at 0x8000.
-// r0 -> 0x00000000
-// r1 -> 0x00000C42
-// r2 -> 0x00000100 - start of ATAGS
-// preserve these registers as argument for kernel_main
 _start:
+
+ldr pc, _reset_h
+ldr pc, _undefined_instruction_vector_h
+ldr pc, _software_interrupt_vector_h
+ldr pc, _prefetch_abort_vector_h
+ldr pc, _data_abort_vector_h
+ldr pc, _unused_handler_h
+ldr pc, _interrupt_vector_h
+ldr pc, _fast_interrupt_vector_h
+
+_reset_h:                           .word   _reset_
+_undefined_instruction_vector_h:    .word   _reset_
+_software_interrupt_vector_h:       .word   _reset_
+_prefetch_abort_vector_h:           .word   _reset_
+_data_abort_vector_h:               .word   _reset_
+_unused_handler_h:                  .word   _reset_
+_interrupt_vector_h:                .word   interrupt
+_fast_interrupt_vector_h:           .word   _reset_
+
+_reset_:
+
+	mov     r0, #0x8000
+	mov     r1, #0x0000
+	ldmia   r0!,{r2, r3, r4, r5, r6, r7, r8, r9}
+	stmia   r1!,{r2, r3, r4, r5, r6, r7, r8, r9}
+	ldmia   r0!,{r2, r3, r4, r5, r6, r7, r8, r9}
+	stmia   r1!,{r2, r3, r4, r5, r6, r7, r8, r9}
+
 	// Setup the stack.
 	mov sp, #0x4000
 

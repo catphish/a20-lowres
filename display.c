@@ -53,6 +53,8 @@ void display_init() {
   de_fe->ch1_horzfact = (0<<16)|0x4000;
   de_fe->ch0_vertfact = (0<<16)|0x4000;
   de_fe->ch1_vertfact = (0<<16)|0x4000;
+  de_fe->line_int_ctrl = 65;
+  de_fe->int_enable = (1<<9);
   // Start rendering frames
   de_fe->frame_ctrl |= 1;
   de_fe->frame_ctrl |= (1<<16);
@@ -75,18 +77,4 @@ void display_init() {
   hdmi->video_fp = ((4-1)<<16) | (88-1); //Front porch
   hdmi->video_spw = ((5-1)<<16) | (44-1); // Sync pulse
 
-  // Output a simple test pattern
-  for(int n=0;n<480*270;n++) {
-    layer0_data[n] = 0xff000000;
-    if(n&2) layer0_data[n] |= 0x444444;
-  }
-
-  // Copy a 16x16 sprite from 0x60000000 and display it at 0,0
-  uint32_t * sprite = (uint32_t*) 0x60000000;
-  for(int x=0;x<16;x++) {
-    for(int y=0;y<16;y++) {
-      if(sprite[y*16+x] & 0xff000000)
-        layer0_data[y*480+x] = sprite[y*16+x] | 0xff000000;
-    }
-  }
 }

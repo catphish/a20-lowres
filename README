@@ -7,3 +7,5 @@ This demonstrates a basic build environment, and use of 3 cores of the A20 SoC:
 * Display engine backend - configured as a passthrough from the frontend to HDMI.
 
 The demo displays a test pattern and displays a small sprite over the top if one is present in memory. The application can be built according to the simple build script and executed from u-boot from 0x8000 or from an ELF.
+
+It is hoped that this can be used as the basis for a retro-style games platform.
