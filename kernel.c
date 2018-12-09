@@ -5,8 +5,8 @@
 
 struct layer {
   struct tilemap * tilemap;
-  uint32_t x_offset;
-  uint32_t y_offset;
+  int32_t x_offset;
+  int32_t y_offset;
 };
 
 struct tilemap {
@@ -15,9 +15,10 @@ struct tilemap {
   uint16_t* pattern;
 };
 
-uint16_t pattern_a[30*17];
+uint16_t pattern_a[31*18];
 struct tilemap tilemap_a;
 struct layer layer_a;
+struct layer layer_b;
 
 #define GICD_BASE 0x01C81000
 struct gicd_reg {
@@ -67,35 +68,16 @@ struct gicc_reg {
 };
 
 volatile uint32_t * back_buffer  = (volatile uint32_t *)BUFFER_1_DATA_ADDR;
-uint32_t frame_counter=0;
+uint32_t * sprite = (uint32_t*) 0x60000000;
 
-void __attribute__((interrupt("FIQ"))) interrupt(void)
-{
-  struct gicc_reg* gicc = (struct gicc_reg*) GICC_BASE;
-  uint32_t iar = gicc->iar;
-
-  // Animate the layer for fun
-  layer_a.x_offset++;
-  if(layer_a.x_offset > 15) layer_a.x_offset = 0;
-
-  uint32_t * sprite = (uint32_t*) 0x60000000;
-
-  // Output a simple test pattern as a background for now
-  for(int n=0;n<480*270;n++) {
-    if(n&2) back_buffer[n] = 0xff444444;
-    else back_buffer[n] = 0xff000000;
-  }
-
-  // As a test / demo, just render one layer
-  struct layer active_layer = layer_a;
-
+void render_layer(struct layer* active_layer) {
   // Loop ofer the tile (sprite) map for this layer, incrementing the x, y
-  for(int tilemap_offset_x=0;tilemap_offset_x<active_layer.tilemap->x_size;tilemap_offset_x++) {
-    for(int tilemap_offset_y=0;tilemap_offset_y<active_layer.tilemap->y_size;tilemap_offset_y++) {
+  for(int tilemap_offset_x=0;tilemap_offset_x<active_layer->tilemap->x_size;tilemap_offset_x++) {
+    for(int tilemap_offset_y=0;tilemap_offset_y<active_layer->tilemap->y_size;tilemap_offset_y++) {
       // Check whether a tile is defined in the map at this offset (0 means no tile)
-      int tilemap_offset = tilemap_offset_y * active_layer.tilemap->x_size + tilemap_offset_x;
+      int tilemap_offset = tilemap_offset_y * active_layer->tilemap->x_size + tilemap_offset_x;
       uint16_t tile_id;
-      if(tile_id = active_layer.tilemap->pattern[tilemap_offset]) {
+      if(tile_id = active_layer->tilemap->pattern[tilemap_offset]) {
         // Fetch tile pixel data
         uint32_t* tile_data = sprite + (tile_id - 1) * 256;
         // Loop over pixels
@@ -103,8 +85,10 @@ void __attribute__((interrupt("FIQ"))) interrupt(void)
           for(int y=0;y<16;y++) {
             // Check pixel isn't transparent
             if(tile_data[y*16+x] & 0xff000000){
-              int destination_x = x + active_layer.x_offset + tilemap_offset_x * 16;
-              int destination_y = y + active_layer.y_offset + tilemap_offset_y * 16;
+              int destination_x = x + active_layer->x_offset + tilemap_offset_x * 16;
+              int destination_y = y + active_layer->y_offset + tilemap_offset_y * 16;
+              if(destination_x<0 || destination_x > 479) continue;
+              if(destination_y<0 || destination_y > 269) continue;
               back_buffer[destination_y*480 + destination_x] = tile_data[y*16+x];
             }
           }
@@ -112,6 +96,30 @@ void __attribute__((interrupt("FIQ"))) interrupt(void)
       }
     }
   }
+}
+
+uint32_t frame_counter=0;
+
+void __attribute__((interrupt("FIQ"))) interrupt(void)
+{
+  struct gicc_reg* gicc = (struct gicc_reg*) GICC_BASE;
+  uint32_t iar = gicc->iar;
+
+  // Output a simple test pattern as a background for now
+  for(int n=0;n<480*270;n++) {
+    if(n&2) back_buffer[n] = 0xff444444;
+    else back_buffer[n] = 0xff000000;
+  }
+
+  // As a test / demo, render 2 moving layers
+  render_layer(&layer_b);
+  render_layer(&layer_a);
+
+  // Animate the layer for fun
+  layer_a.x_offset++;
+  if(layer_a.x_offset > 0) layer_a.x_offset = -15;
+  layer_b.x_offset--;
+  if(layer_b.x_offset < -15) layer_b.x_offset = 0;
 
   struct sunxi_de_fe_reg * const de_fe =(struct sunxi_de_fe_reg *)DEFE0_BASE;
 
@@ -195,16 +203,20 @@ void kernel_main()
 
   uart_print("Interrupts configured...\r\n");
 
-  for(int n=0;n<17*29;n++) {
+  for(int n=0;n<18*31;n++) {
     pattern_a[n] = 1;
   }
-  tilemap_a.x_size = 29;
-  tilemap_a.y_size = 17;
+  tilemap_a.x_size = 31;
+  tilemap_a.y_size = 18;
   tilemap_a.pattern = pattern_a;
   
-  layer_a.x_offset = 8;
+  layer_a.x_offset = -15;
   layer_a.y_offset = 0;
   layer_a.tilemap = &tilemap_a;
+
+  layer_b.x_offset = 0;
+  layer_b.y_offset = -8;
+  layer_b.tilemap = &tilemap_a;
 
   display_init();
 
