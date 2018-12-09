@@ -80,17 +80,19 @@ void __attribute__((interrupt("FIQ"))) interrupt(void)
 
   uint32_t * sprite = (uint32_t*) 0x60000000;
 
-  // Output a simple test pattern
+  // Output a simple test pattern as a background for now
   for(int n=0;n<480*270;n++) {
     if(n&2) back_buffer[n] = 0xff444444;
     else back_buffer[n] = 0xff000000;
   }
 
+  // As a test / demo, just render one layer
   struct layer active_layer = layer_a;
-  // Loop ofer the time map, incrementing the x, y
-  for  (int tilemap_offset_x=0;tilemap_offset_x<active_layer.tilemap->x_size;tilemap_offset_x++) {
+
+  // Loop ofer the tile (sprite) map for this layer, incrementing the x, y
+  for(int tilemap_offset_x=0;tilemap_offset_x<active_layer.tilemap->x_size;tilemap_offset_x++) {
     for(int tilemap_offset_y=0;tilemap_offset_y<active_layer.tilemap->y_size;tilemap_offset_y++) {
-      // Check whether a tile is defined in the map at this offset
+      // Check whether a tile is defined in the map at this offset (0 means no tile)
       int tilemap_offset = tilemap_offset_y * active_layer.tilemap->x_size + tilemap_offset_x;
       uint16_t tile_id;
       if(tile_id = active_layer.tilemap->pattern[tilemap_offset]) {
