@@ -1,6 +1,23 @@
 #include "uart.h"
 #include "display.h"
 #include <stdint.h>
+#include <string.h>
+
+struct layer {
+  struct tilemap * tilemap;
+  uint32_t x_offset;
+  uint32_t y_offset;
+};
+
+struct tilemap {
+  uint32_t x_size;
+  uint32_t y_size;
+  uint16_t* pattern;
+};
+
+uint16_t pattern_a[30*17];
+struct tilemap tilemap_a;
+struct layer layer_a;
 
 #define GICD_BASE 0x01C81000
 struct gicd_reg {
@@ -49,35 +66,68 @@ struct gicc_reg {
   uint32_t dir;
 };
 
-int m=0;
-extern volatile uint32_t * layer0_data;
+volatile uint32_t * back_buffer  = (volatile uint32_t *)BUFFER_1_DATA_ADDR;
+uint32_t frame_counter=0;
+
 void __attribute__((interrupt("FIQ"))) interrupt(void)
 {
   struct gicc_reg* gicc = (struct gicc_reg*) GICC_BASE;
   uint32_t iar = gicc->iar;
 
-  //uart_print("Interrupt: ");
-  //uart_print_uint32(iar);
-  //uart_print("\r\n");
+  // Animate the layer for fun
+  layer_a.x_offset++;
+  if(layer_a.x_offset > 15) layer_a.x_offset = 0;
 
   uint32_t * sprite = (uint32_t*) 0x60000000;
+
   // Output a simple test pattern
   for(int n=0;n<480*270;n++) {
-    if(n&2) layer0_data[n] = 0xff444444;
-    else layer0_data[n] = 0xff000000;
+    if(n&2) back_buffer[n] = 0xff444444;
+    else back_buffer[n] = 0xff000000;
   }
-  // Copy a 16x16 sprite from 0x60000000 and display it at 0,m
-  for(int x=0;x<16;x++) {
-    for(int y=0;y<16;y++) {
-      if(sprite[y*16+x] & 0xff000000)
-        layer0_data[y*480+x+m] = sprite[y*16+x] | 0xff000000;
+
+  struct layer active_layer = layer_a;
+  // Loop ofer the time map, incrementing the x, y
+  for  (int tilemap_offset_x=0;tilemap_offset_x<active_layer.tilemap->x_size;tilemap_offset_x++) {
+    for(int tilemap_offset_y=0;tilemap_offset_y<active_layer.tilemap->y_size;tilemap_offset_y++) {
+      // Check whether a tile is defined in the map at this offset
+      int tilemap_offset = tilemap_offset_y * active_layer.tilemap->x_size + tilemap_offset_x;
+      uint16_t tile_id;
+      if(tile_id = active_layer.tilemap->pattern[tilemap_offset]) {
+        // Fetch tile pixel data
+        uint32_t* tile_data = sprite + (tile_id - 1) * 256;
+        // Loop over pixels
+        for(int x=0;x<16;x++) {
+          for(int y=0;y<16;y++) {
+            // Check pixel isn't transparent
+            if(tile_data[y*16+x] & 0xff000000){
+              int destination_x = x + active_layer.x_offset + tilemap_offset_x * 16;
+              int destination_y = y + active_layer.y_offset + tilemap_offset_y * 16;
+              back_buffer[destination_y*480 + destination_x] = tile_data[y*16+x];
+            }
+          }
+        }
+      }
+      tilemap_offset++;
     }
   }
-  m++;
-  if(m==120) m=0;
+
   struct sunxi_de_fe_reg * const de_fe =(struct sunxi_de_fe_reg *)DEFE0_BASE;
+
+  // Swap the front and back buffers ready for next frame
+  uint32_t * tmp = (uint32_t*)de_fe->ch0_addr;
+  de_fe->ch0_addr = (uint32_t)back_buffer; // Make back buffer live
+  de_fe->frame_ctrl |= 1; // Latch FE config registers
+  back_buffer = tmp; // The previously rendered frame becomes the back buffer
+
   de_fe->int_status = 0xffffffff;
   gicc->eoir = iar;
+
+  frame_counter++;
+  if(frame_counter == 60) {
+    frame_counter = 0;
+    uart_print("Rendered 60 frames.\r\n");
+  }
 }
 
 // Main program loop
@@ -90,15 +140,19 @@ void kernel_main()
     if(n==0)
     {
       // SRAM.  Write back.
-      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (0<<12) | (3<<10) | (3<<2) | 2;
-    } else if (n>=0x400 && n<0xc00) {
-      // DRAM. Write through.
-      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (0<<12) | (3<<10) | (2<<2) | 2;
+      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (1<<12) | (3<<10) | (3<<2) | 2;
+    } else if(n>=0x400 && n<=0x401) {
+      // First 2MB of DRAM, we will use this for the framebuffer, no cache
+      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (0<<12) | (3<<10) | (0<<2) | 2;
+    } else if(n>=0x402 && n<0xc00) {
+      // Remaining DRAM. Write back.
+      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (1<<12) | (3<<10) | (3<<2) | 2;
     } else {
-      // Other stuff. Non-shared device.
-      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (2<<12) | (3<<10) | (0<<2) | 2;
+      // Other stuff. Strictly ordered for safety.
+      *(volatile uint32_t *)(0x4000 + n*4) = (n<<20) | (0<<12) | (3<<10) | (0<<2) | 2;
     }
   }
+
   // Disable MMU
   asm("ldr r8, =0x0;"
       "mcr p15, 0, r8, c1, c0, 0;"
@@ -140,6 +194,25 @@ void kernel_main()
 
   uart_print("Interrupts configured...\r\n");
 
+  for(int n=0;n<17*29;n++) {
+    pattern_a[n] = 1;
+  }
+  tilemap_a.x_size = 29;
+  tilemap_a.y_size = 17;
+  tilemap_a.pattern = pattern_a;
+  
+  layer_a.x_offset = 8;
+  layer_a.y_offset = 0;
+  layer_a.tilemap = &tilemap_a;
+
   display_init();
-  while ( 1 );
+
+  // while(1) {
+  //   for(int mb=0; mb<10;mb++){
+  //     for(int n=0;n<1048576;n++) { // 4MB
+  //       uint32_t tmp = front_buffer[n];
+  //     }
+  //   }
+  //   uart_print("Copied 40MB.\r\n");
+  // }
 }

@@ -1,8 +1,15 @@
-void display_init();
 #define DEFE0_BASE (uint32_t)0x01E00000
 #define DEBE0_BASE (uint32_t)0x01E60000
 #define CCM_BASE   (uint32_t)0x01C20000
 #define HDMI_BASE  (uint32_t)0x01C16000
+
+#define DRAM_BASE  (uint32_t)0x40000000
+#define DRAM_SIZE  (uint32_t)0x40000000
+
+#define BUFFER_0_DATA_ADDR (DRAM_BASE + 0x000000)
+#define BUFFER_1_DATA_ADDR (DRAM_BASE + 0x100000)
+
+void display_init();
 
 struct sunxi_de_fe_reg {
   uint32_t enable;     /* 0x000 */

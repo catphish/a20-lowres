@@ -2,12 +2,6 @@
 #include "display.h"
 #include <stdint.h>
 
-#define DRAM_BASE  (uint32_t)0x40000000
-#define DRAM_SIZE  (uint32_t)0x40000000
-
-#define LAYER0_DATA_ADDR (DRAM_BASE + DRAM_SIZE - 0x1000000)
-volatile uint32_t * layer0_data = (volatile uint32_t *)LAYER0_DATA_ADDR;
-
 void display_init() {
   // Enable FE0 clocks
   struct sunxi_ccm_reg * const ccm =(struct sunxi_ccm_reg *)CCM_BASE;
@@ -40,7 +34,7 @@ void display_init() {
   // Contigure the remainder of FE0
   de_fe->frame_ctrl |= 2;
   de_fe->algorithm_sel = (1<<8);
-  de_fe->ch0_addr = LAYER0_DATA_ADDR;
+  de_fe->ch0_addr = BUFFER_0_DATA_ADDR;
   de_fe->ch0_stride = 480*4;
   de_fe->input_fmt = 0x151;
   de_fe->output_fmt = 0x2;
@@ -53,7 +47,7 @@ void display_init() {
   de_fe->ch1_horzfact = (0<<16)|0x4000;
   de_fe->ch0_vertfact = (0<<16)|0x4000;
   de_fe->ch1_vertfact = (0<<16)|0x4000;
-  de_fe->line_int_ctrl = 65;
+  de_fe->line_int_ctrl = 0;
   de_fe->int_enable = (1<<9);
   // Start rendering frames
   de_fe->frame_ctrl |= 1;
