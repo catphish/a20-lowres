@@ -110,7 +110,6 @@ void __attribute__((interrupt("FIQ"))) interrupt(void)
           }
         }
       }
-      tilemap_offset++;
     }
   }
 
